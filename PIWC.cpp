@@ -12,14 +12,35 @@
 #define MQTT_CONNECT_RETRY_SECONDS 5
 #define QOS_AT_MOST_ONCE_0 0
 #define TEMP_BUFFER_SIZE 1000
+#define SEPARATOR "/"
 
-
-PIWC::PIWC(char* mqttBroker) : _mqttOptions(MQTTClient_connectOptions_initializer) {
+PIWC::PIWC(char* mqttBroker, char* certsDir) : _mqttOptions(MQTTClient_connectOptions_initializer), 
+                                               _sslOptions(MQTTClient_SSLOptions_initializer) {
    this->_myClient = NULL;
    this->_topic = NULL;
    this->_mqttBroker = mqttBroker;
-}
+   _certsDir = certsDir;
+   if (strstr(_mqttBroker, "ssl://") == _mqttBroker) {
+      // ssl is enabled so setup the options
+      _mqttOptions.ssl = &_sslOptions;
+      _sslOptions.trustStore = (char*) malloc(strlen(_certsDir) + strlen(SEPARATOR) + strlen(CA_CERT_FILE) + 1);
+      _sslOptions.keyStore   = (char*) malloc(strlen(_certsDir) + strlen(SEPARATOR) + strlen(CLIENT_CERT_FILE) + 1);
+      _sslOptions.privateKey   = (char*) malloc(strlen(_certsDir) + strlen(SEPARATOR) + strlen(CLIENT_KEY_FILE) + 1);
+      strcpy((char*) _sslOptions.trustStore, _certsDir);
+      strcpy((char*) _sslOptions.keyStore, _certsDir);
+      strcpy((char*) _sslOptions.privateKey, _certsDir);
+      strcat((char*) _sslOptions.trustStore, SEPARATOR);
+      strcat((char*) _sslOptions.keyStore, SEPARATOR);
+      strcat((char*) _sslOptions.privateKey, SEPARATOR);
+      strcat((char*) _sslOptions.trustStore, CA_CERT_FILE);
+      strcat((char*) _sslOptions.keyStore, CLIENT_CERT_FILE);
+      strcat((char*) _sslOptions.privateKey, CLIENT_KEY_FILE);
 
+      _sslOptions.enabledCipherSuites = "TLSv1.2";
+   } else {
+      _mqttOptions.ssl = NULL;
+   }
+}
 
 int PIWC::messageArrived(void *context, char* topicName, int topicLen, MQTTClient_message *message) {
    PIWC* myThis = (PIWC*)context;

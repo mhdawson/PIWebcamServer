@@ -5,6 +5,10 @@ and then runs a script to take a picture, upload it to a web server
 and then send the name back to the requestor through a response using
 mqtt
 
+## Requires
+
+fswebcam - apt-get install fswebcam
+
 
 ## To build:
 TODO

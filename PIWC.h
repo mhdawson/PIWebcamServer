@@ -7,6 +7,10 @@
 
 #include <time.h>
 
+#define CA_CERT_FILE     "ca.cert"
+#define CLIENT_CERT_FILE "client.cert"
+#define CLIENT_KEY_FILE  "client.key"
+
 extern "C" {
     #include "MQTTClient.h"
     #include "MQTTClientPersistence.h"
@@ -14,14 +18,16 @@ extern "C" {
 
 class PIWC {
    public:
-      PIWC(char* mqttBroker);
+      PIWC(char* mqttBroker, char* certsDir);
       void listenForMessages(char* topic);
 
    private:
       char* _topic;
       char* _mqttBroker;
+      char* _certsDir;
       MQTTClient _myClient;
       MQTTClient_connectOptions _mqttOptions;
+      MQTTClient_SSLOptions _sslOptions;
 
       void takePicture();
 
