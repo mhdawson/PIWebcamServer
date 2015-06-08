@@ -6,6 +6,7 @@
 #define _PIWC
 
 #include <time.h>
+#include <pthread.h>
 
 #define CA_CERT_FILE     "ca.cert"
 #define CLIENT_CERT_FILE "client.cert"
@@ -20,6 +21,7 @@ class PIWC {
    public:
       PIWC(char* mqttBroker, char* certsDir);
       void listenForMessages(char* topic);
+      void takePictureLoop();
 
    private:
       char* _topic;
@@ -28,6 +30,8 @@ class PIWC {
       MQTTClient _myClient;
       MQTTClient_connectOptions _mqttOptions;
       MQTTClient_SSLOptions _sslOptions;
+      pthread_cond_t  _takePictureCond;
+      pthread_mutex_t _takePictureMutex;
 
       void takePicture();
 

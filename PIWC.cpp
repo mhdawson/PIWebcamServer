@@ -7,6 +7,7 @@
 #include <unistd.h> 
 #include <stdlib.h>
 #include <time.h>
+#include <pthread.h>
 #include "PIWC.h"
 
 #define MQTT_CONNECT_RETRY_SECONDS 5
@@ -14,8 +15,15 @@
 #define TEMP_BUFFER_SIZE 1000
 #define SEPARATOR "/"
 
+static void* takePictureThread(void* context) {
+   PIWC* myThis = (PIWC*) context;
+   myThis->takePictureLoop();
+}
+
 PIWC::PIWC(char* mqttBroker, char* certsDir) : _mqttOptions(MQTTClient_connectOptions_initializer), 
-                                               _sslOptions(MQTTClient_SSLOptions_initializer) {
+                                               _sslOptions(MQTTClient_SSLOptions_initializer),
+                                               _takePictureCond(PTHREAD_COND_INITIALIZER),
+                                               _takePictureMutex(PTHREAD_MUTEX_INITIALIZER) {
    this->_myClient = NULL;
    this->_topic = NULL;
    this->_mqttBroker = mqttBroker;
@@ -40,6 +48,17 @@ PIWC::PIWC(char* mqttBroker, char* certsDir) : _mqttOptions(MQTTClient_connectOp
    } else {
       _mqttOptions.ssl = NULL;
    }
+
+   // It appears that if too much time is spent in the callback before we try to publish the response
+   // then we don't get the message even on the topic even though the client tells us it was sent ok
+   // We therefore start a new thead to do the work for us.  
+   pthread_t threadId = 0;
+   pthread_attr_t attr;
+   pthread_attr_init(&attr);
+   int result = pthread_create(&threadId, &attr, &takePictureThread, (void*) this); 
+   if (0 != result) { 
+      printf("Failed to start thread: %d\n", result);
+   }
 }
 
 int PIWC::messageArrived(void *context, char* topicName, int topicLen, MQTTClient_message *message) {
@@ -53,6 +72,7 @@ int PIWC::messageArrived(void *context, char* topicName, int topicLen, MQTTClien
    memset(buffer, 0, TEMP_BUFFER_SIZE);
    strncpy(buffer, (char*) message->payload, limit);
 
+   // request that the next picture be taken
    myThis->takePicture();
 
    MQTTClient_freeMessage(&message);
@@ -103,13 +123,27 @@ void PIWC::listenForMessages(char* topic) {
 }
 
 void PIWC::takePicture() {
+   pthread_mutex_lock(&_takePictureMutex);
+   pthread_cond_signal(&_takePictureCond);
+   pthread_mutex_unlock(&_takePictureMutex);
+}
+
+void PIWC::takePictureLoop() {
    char buffer[1000];
-   long long pictureId = time(NULL);
-   sprintf(buffer, "./takepicture.sh %lu.jpg", pictureId);
-   system(buffer);
-   sprintf(buffer, "%lu.jpg", pictureId); 
-   int result = MQTTClient_publish(_myClient, "house/camera/newpicture", strlen(buffer), buffer, 0, false, NULL);
-   if (MQTTCLIENT_SUCCESS != result) {
-      printf("publish failed:%d\n",result);
+   while (true) {
+      // wait until we are signaled to take the next picture
+      pthread_mutex_lock(&_takePictureMutex);
+      pthread_cond_wait(&_takePictureCond, &_takePictureMutex);
+      pthread_mutex_unlock(&_takePictureMutex);
+
+      // now take the picture and publish when complete
+      long long pictureId = time(NULL);
+      sprintf(buffer, "./takepicture.sh %lu.jpg", pictureId);
+      system(buffer);
+      sprintf(buffer, "%lu.jpg", pictureId); 
+      int result = MQTTClient_publish(_myClient, "house/camera/newpicture", strlen(buffer), buffer, 0, false, NULL);
+      if (MQTTCLIENT_SUCCESS != result) {
+         printf("publish failed:%d\n",result);
+      }
    }
 }
