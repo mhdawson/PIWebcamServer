@@ -15,19 +15,25 @@
 #define TEMP_BUFFER_SIZE 1000
 #define SEPARATOR "/"
 
+
+MQTTClient_connectOptions mqttOptions_init = MQTTClient_connectOptions_initializer;
+MQTTClient_SSLOptions sslOptions_init = MQTTClient_SSLOptions_initializer ;
+
 static void* takePictureThread(void* context) {
    PIWC* myThis = (PIWC*) context;
    myThis->takePictureLoop();
 }
 
-PIWC::PIWC(char* mqttBroker, char* certsDir) : _mqttOptions(MQTTClient_connectOptions_initializer), 
-                                               _sslOptions(MQTTClient_SSLOptions_initializer),
-                                               _takePictureCond(PTHREAD_COND_INITIALIZER),
+PIWC::PIWC(char* mqttBroker, char* certsDir) : _takePictureCond(PTHREAD_COND_INITIALIZER),
                                                _takePictureMutex(PTHREAD_MUTEX_INITIALIZER) {
    this->_myClient = NULL;
    this->_topic = NULL;
    this->_mqttBroker = mqttBroker;
    _certsDir = certsDir;
+   memcpy(&_mqttOptions, &mqttOptions_init, sizeof(mqttOptions_init));
+   memcpy(&_sslOptions, &sslOptions_init, sizeof(sslOptions_init));;
+
+
    if (strstr(_mqttBroker, "ssl://") == _mqttBroker) {
       // ssl is enabled so setup the options
       _mqttOptions.ssl = &_sslOptions;
