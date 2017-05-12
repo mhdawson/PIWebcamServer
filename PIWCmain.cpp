@@ -15,28 +15,34 @@
 #define INVALID_CERT_DIR           -3 
 #define MISSING_CERT_FILES         -4
 
+#define MQTT_REQUEST_TOPIC_INDEX    1
+#define MQTT_REPLY_TOPIC_INDEX      2
+#define MQTT_PARAMTER_INDEX         3
+#define MQTT_CERTS_PARAMTER_INDEX   4
+#define MIN_PARAMTERS               4
+
 #define NUM_REQUIRED_CERT_FILES 3 
 
 int main(int argc, char *argv[]) {
    char* certsDir = NULL;
 
    // validate we got the required parameters 
-   if (2 > argc) {
-      printf("Usage: PIWCMain mqtt_url <cert info dir>\n");
+   if (argc < MIN_PARAMTERS) {
+      printf("Usage: PIWCMain requestTopic replyTopic mqtt_url <cert info dir>\n");
       return MISSING_BROKER;
    }
 
-   if (strstr(argv[1], "ssl://") == argv[1]) {
+   if (strstr(argv[MQTT_PARAMTER_INDEX], "ssl://") == argv[MQTT_PARAMTER_INDEX]) {
       // certificates and keys 
       // the names of the files in the directory specified must be client.cert client.key and ca.cert
-      if (3 > argc) { 
+      if (argc < (MQTT_CERTS_PARAMTER_INDEX + 1)) {
          printf("Cert info dir required for connection to broker with ssl - exiting\n");
          printf("Usage: PI433Main mqtt_url <cert info dir>\n");
          return MISSING_CERT_DIR;
       }
 
       // validate the directory exists
-      DIR* dirPtr = opendir(argv[2]);
+      DIR* dirPtr = opendir(argv[MQTT_CERTS_PARAMTER_INDEX]);
       if(NULL == dirPtr) {
          printf("Cert info dir was invalid - exiting\n");
          return INVALID_CERT_DIR;
@@ -58,9 +64,10 @@ int main(int argc, char *argv[]) {
          return MISSING_CERT_FILES;
       }
 
-      certsDir = argv[2];
+      certsDir = argv[MQTT_CERTS_PARAMTER_INDEX];
    }
 
-   PIWC cameraService = PIWC(argv[1], certsDir);
-   cameraService.listenForMessages((char*)"house/camera/capture");
+   PIWC cameraService = PIWC(argv[MQTT_PARAMTER_INDEX], certsDir);
+   cameraService.listenForMessages(argv[MQTT_REQUEST_TOPIC_INDEX],
+                                   argv[MQTT_REPLY_TOPIC_INDEX]);
 }

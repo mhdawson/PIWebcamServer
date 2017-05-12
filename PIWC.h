@@ -20,11 +20,12 @@ extern "C" {
 class PIWC {
    public:
       PIWC(char* mqttBroker, char* certsDir);
-      void listenForMessages(char* topic);
+      void listenForMessages(char* requestTopic, char* replyTopic);
       void takePictureLoop();
 
    private:
-      char* _topic;
+      char* _requestTopic;
+      char* _replyTopic;
       char* _mqttBroker;
       char* _certsDir;
       MQTTClient _myClient;

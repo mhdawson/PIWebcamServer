@@ -14,6 +14,7 @@
 #define QOS_AT_MOST_ONCE_0 0
 #define TEMP_BUFFER_SIZE 1000
 #define SEPARATOR "/"
+#define NUM_CHARS_IN_ID 10
 
 
 MQTTClient_connectOptions mqttOptions_init = MQTTClient_connectOptions_initializer;
@@ -24,10 +25,20 @@ static void* takePictureThread(void* context) {
    myThis->takePictureLoop();
 }
 
+
+char randomId[NUM_CHARS_IN_ID + 1];
+static char* getRandomId() {
+  memset(randomId, 0, NUM_CHARS_IN_ID + 1);
+  for (int i=0; i < NUM_CHARS_IN_ID; i++) {
+    randomId[i] = (rand() % 78) + 30;
+  }
+  return randomId;
+}
+
 PIWC::PIWC(char* mqttBroker, char* certsDir) : _takePictureCond(PTHREAD_COND_INITIALIZER),
                                                _takePictureMutex(PTHREAD_MUTEX_INITIALIZER) {
    this->_myClient = NULL;
-   this->_topic = NULL;
+   this->_requestTopic = NULL;
    this->_mqttBroker = mqttBroker;
    _certsDir = certsDir;
    memcpy(&_mqttOptions, &mqttOptions_init, sizeof(mqttOptions_init));
@@ -91,7 +102,7 @@ void PIWC::connectionLost(void *context, char *cause) {
 
    while (true) {
       if (MQTTCLIENT_SUCCESS == MQTTClient_connect(myThis->_myClient, &(myThis->_mqttOptions))) {
-         MQTTClient_subscribe(myThis->_myClient, myThis->_topic, QOS_AT_MOST_ONCE_0);
+         MQTTClient_subscribe(myThis->_myClient, myThis->_requestTopic, QOS_AT_MOST_ONCE_0);
          break;
       }
       // wait 5 seconds and then try to reconnect
@@ -99,15 +110,22 @@ void PIWC::connectionLost(void *context, char *cause) {
    }
 }
 
-void PIWC::listenForMessages(char* topic) {
-   this->_topic = (char*) malloc(strlen(topic) + 1);
-   if (NULL == this->_topic) {
-      printf("Error, failed to allocation string for topic\n");
+void PIWC::listenForMessages(char* requestTopic, char* replyTopic) {
+   this->_requestTopic = (char*) malloc(strlen(requestTopic) + 1);
+   if (NULL == this->_requestTopic) {
+      printf("Error, failed to allocation string for request topic\n");
       return;
    }
-   strcpy(this->_topic, topic);
+   strcpy(this->_requestTopic, requestTopic);
 
-   MQTTClient_create(&_myClient, _mqttBroker, "PICameraSevice", MQTTCLIENT_PERSISTENCE_NONE, (void*) this);
+   this->_replyTopic = (char*) malloc(strlen(replyTopic) + 1);
+   if (NULL == this->_replyTopic) {
+      printf("Error, failed to allocation string for reply topic\n");
+      return;
+   }
+   strcpy(this->_replyTopic, replyTopic);
+
+   MQTTClient_create(&_myClient, _mqttBroker, getRandomId(), MQTTCLIENT_PERSISTENCE_NONE, (void*) this);
    MQTTClient_setCallbacks(_myClient, (void*) this, &(PIWC::connectionLost), &(PIWC::messageArrived), NULL);
 
    _mqttOptions.keepAliveInterval = 10;
@@ -120,7 +138,7 @@ void PIWC::listenForMessages(char* topic) {
       return;
    }
 
-   MQTTClient_subscribe(_myClient, this->_topic, QOS_AT_MOST_ONCE_0);
+   MQTTClient_subscribe(_myClient, this->_requestTopic, QOS_AT_MOST_ONCE_0);
 
    while(1) {
       usleep(1000 * 1000);
@@ -147,7 +165,7 @@ void PIWC::takePictureLoop() {
       sprintf(buffer, "./takepicture.sh %lu.jpg", pictureId);
       system(buffer);
       sprintf(buffer, "%lu.jpg", pictureId); 
-      int result = MQTTClient_publish(_myClient, "house/camera/newpicture", strlen(buffer), buffer, 0, false, NULL);
+      int result = MQTTClient_publish(_myClient, _replyTopic, strlen(buffer), buffer, 0, false, NULL);
       if (MQTTCLIENT_SUCCESS != result) {
          printf("publish failed:%d\n",result);
       }
